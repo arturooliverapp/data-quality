@@ -3,85 +3,34 @@ import pandas as pd
 import os
 from sqlalchemy import text
 from db_connection import get_pg_engine
-from authlib.integrations.requests_client import OAuth2Session
-from urllib.parse import urlencode
-from dotenv import load_dotenv, dotenv_values
 from pathlib import Path
+from dotenv import load_dotenv, dotenv_values
 
+# === Load .env for local development ===
 env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path)
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+    env = dotenv_values(dotenv_path=env_path)
+    for k, v in env.items():
+        os.environ[k] = v
 
-# Override environment variables from .env (local only)
-env = dotenv_values(dotenv_path=env_path)
-for k, v in env.items():
-    os.environ[k] = v
+# === Google login settings ===
+AUTHORIZED_DOMAIN = os.getenv("AUTHORIZED_DOMAIN", st.secrets.get("AUTHORIZED_DOMAIN", "popularpower.io"))
 
-# === Load secrets ===
-CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8501/")
-AUTHORIZED_DOMAIN = os.getenv("AUTHORIZED_DOMAIN")
-COOKIE_SECRET = os.getenv("COOKIE_SECRET")
-AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-TOKEN_URL = "https://oauth2.googleapis.com/token"
-USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
-SCOPE = "openid email profile"
-
-# === Login Functions ===
-def get_login_url():
-    query = urlencode({
-        "client_id": CLIENT_ID,
-        "response_type": "code",
-        "redirect_uri": REDIRECT_URI,
-        "scope": SCOPE,
-        "access_type": "offline",
-        "prompt": "select_account",
-        "hd": AUTHORIZED_DOMAIN
-    })
-    return f"{AUTH_URL}?{query}"
-
-def fetch_user_info(auth_code):
-    oauth = OAuth2Session(CLIENT_ID, CLIENT_SECRET, redirect_uri=REDIRECT_URI)
-    token = oauth.fetch_token(
-        TOKEN_URL,
-        code=auth_code,
-        client_id=CLIENT_ID,
-        client_secret=CLIENT_SECRET,
-        include_client_id=True,
-    )
-    resp = oauth.get(USERINFO_URL)
-    return resp.json()
-
-# === Auth Flow ===
-query_params = st.query_params.to_dict()
-if "code" in query_params and "user" not in st.session_state:
-    try:
-        user_info = fetch_user_info(query_params["code"])
-        user_email = user_info.get("email", "")
-        user_domain = user_email.split("@")[-1]
-
-        if user_domain.lower() == AUTHORIZED_DOMAIN.lower():
-            st.session_state["user"] = user_info
-            st.success(f"✅ Logged in as {user_email}")
-        else:
-            st.error("Access denied. Please use your @popularpower.io email.")
-            st.stop()
-    except Exception as e:
-        st.error(f"Authentication failed: {e}")
-        st.stop()
-
-# === Require login ===
-if "user" not in st.session_state:
+# === Streamlit login redirect ===
+if not st.user.is_logged_in:
     st.set_page_config(page_title="Login", layout="centered")
     st.title("🔐 Login Required")
-    st.write("Please log in using your @popularpower.io Google account.")
-
-    if st.button("🔐 Log in with Google"):
-        login_url = get_login_url()
-        st.markdown(f'<meta http-equiv="refresh" content="0;url={login_url}">', unsafe_allow_html=True)
-        st.stop()
-
+    st.button("Log in with Google", on_click=st.login)
     st.stop()
+
+# === Domain restriction ===
+user_email = st.user.email
+if not user_email.endswith(f"@{AUTHORIZED_DOMAIN}"):
+    st.error("Access denied. Please use your @popularpower.io email.")
+    st.stop()
+
+st.success(f"✅ Logged in as {user_email}")
 
 # === Main App ===
 st.set_page_config(page_title="Data Quality Checker", layout="wide")
