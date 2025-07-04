@@ -1,47 +1,36 @@
 import os
-import streamlit as st
 from sqlalchemy import create_engine
 from urllib.parse import quote_plus
+import streamlit as st
 
 def get_pg_engine():
-
-    # Check both sources explicitly
+    # Load DB credentials from Streamlit secrets or fallback to .env
     creds = {
-        "user": st.secrets.get("PG_USER") or os.getenv("PG_USER"),
-        "password": st.secrets.get("PG_PASSWORD") or os.getenv("PG_PASSWORD"),
-        "host": st.secrets.get("PG_HOST") or os.getenv("PG_HOST"),
-        "port": st.secrets.get("PG_PORT") or os.getenv("PG_PORT"),
-        "dbname": st.secrets.get("PG_DB") or os.getenv("PG_DB")
+        "user": st.secrets.get("PG_USER", os.getenv("PG_USER")),
+        "password": st.secrets.get("PG_PASSWORD", os.getenv("PG_PASSWORD")),
+        "host": st.secrets.get("PG_HOST", os.getenv("PG_HOST")),
+        "port": st.secrets.get("PG_PORT", os.getenv("PG_PORT")),
+        "dbname": st.secrets.get("PG_DB", os.getenv("PG_DB")),
     }
 
-    # Validate all values
+    # Validate that all values are present
     missing = [k for k, v in creds.items() if not v]
     if missing:
-        st.error(f"❌ Missing DB credentials: {', '.join(missing)}")
         raise ValueError(f"Missing DB credentials: {', '.join(missing)}")
 
-    # Encode password
-    try:
-        password_encoded = quote_plus(creds["password"])
-    except Exception as e:
-        st.error("❌ Failed to encode DB password.")
-        raise e
-
-    # Build connection string
+    # Encode password safely
+    password_encoded = quote_plus(creds["password"])
     connection_string = (
         f"postgresql+psycopg2://{creds['user']}:{password_encoded}"
         f"@{creds['host']}:{creds['port']}/{creds['dbname']}"
     )
 
-    st.write("✅ DB connection string constructed.")
-
     # Create engine
-    try:
-        engine = create_engine(
-            connection_string,
-            pool_size=5,
-            max_overflow=10,
-            pool_timeout=30,
-            pool_recycle=1800
-        )
-        return engine
+    engine = create_engine(
+        connection_string,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=1800
+    )
+    return engine
