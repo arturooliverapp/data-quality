@@ -106,6 +106,7 @@ LEFT JOIN
 WHERE
     o.id = :org_id
     AND s.syncable = TRUE
+    AND s.status <> ‘Disabled’
     AND EXISTS (
         SELECT 1
         FROM public.inverters i
@@ -240,3 +241,16 @@ if "df_raw" in st.session_state:
             mime="text/csv"
         )
         st.dataframe(df.head(10), use_container_width=True)
+        
+        # Extra: Download only rows where data is complete
+        df_complete = df[df["Data Quality Flag"] == "Data Complete"].copy()
+        filename_complete = f"data_quality_complete_{safe_name}.csv"
+        csv_complete_bytes = df_complete.to_csv(index=False).encode("utf-8")
+        st.info(f"✅ {len(df_complete)} sites have complete data.")
+        st.download_button(
+            label="✅ Download Sites with Complete Data Only",
+            data=csv_complete_bytes,
+            file_name=filename_complete,
+            mime="text/csv"
+        )
+
