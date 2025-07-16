@@ -106,7 +106,7 @@ LEFT JOIN
 WHERE
     o.id = :org_id
     AND s.syncable = TRUE
-    AND s.status <> ‘Disabled’
+    AND s.status <> 'Disabled'
     AND EXISTS (
         SELECT 1
         FROM public.inverters i
